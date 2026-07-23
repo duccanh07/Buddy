@@ -6,28 +6,65 @@ on:
       - "v*.*.*"
 
 jobs:
-  build-release:
-    name: Build (${{ matrix.platform }})
+  # ─── Create the GitHub Release first (once) ────────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+      upload_url: ${{ steps.create.outputs.upload_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Release (draft)
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Buddy ${{ github.ref_name }}"
+          draft: true
+          prerelease: false
+          body: |
+            ## Buddy ${{ github.ref_name }}
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full details.
+
+            ### Downloads
+
+            | Platform | File |
+            |----------|------|
+            | 🍎 macOS (Apple Silicon M1/M2/M3) | `.dmg` (aarch64) |
+            | 🍎 macOS (Intel) | `.dmg` (x64) |
+            | 🪟 Windows 64-bit | `.msi` or `_setup.exe` (NSIS) |
+
+  # ─── Build matrix ──────────────────────────────────────────────────────────
+  build:
+    name: Build ${{ matrix.label }}
+    needs: create-release
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
+          - label: macOS-arm64
+            platform: macos-latest
             rust-target: aarch64-apple-darwin
-            label: macOS-arm64
+            tauri-args: "--target aarch64-apple-darwin"
 
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
+          - label: macOS-x64
+            platform: macos-latest
             rust-target: x86_64-apple-darwin
-            label: macOS-x64
+            tauri-args: "--target x86_64-apple-darwin"
 
-          - platform: windows-latest
-            args: ""
+          - label: Windows-x64
+            platform: windows-latest
             rust-target: x86_64-pc-windows-msvc
-            label: windows-x64
+            tauri-args: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -46,7 +83,7 @@ jobs:
         with:
           targets: ${{ matrix.rust-target }}
 
-      - name: Cache Rust
+      - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -56,23 +93,44 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        run: npm run tauri build -- ${{ matrix.tauri-args }}
+
+      # ── macOS: upload .dmg ────────────────────────────────────────────────
+      - name: Upload macOS DMG
+        if: runner.os == 'macOS'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Buddy ${{ github.ref_name }}"
-          releaseBody: |
-            ## What's new in ${{ github.ref_name }}
+        shell: bash
+        run: |
+          DMG=$(find src-tauri/target -name "*.dmg" | head -1)
+          if [ -z "$DMG" ]; then
+            echo "No .dmg found!" && exit 1
+          fi
+          BASENAME=$(basename "$DMG")
+          gh release upload ${{ github.ref_name }} "$DMG#${BASENAME}" --clobber
 
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+      # ── Windows: upload .msi and .exe (NSIS) ─────────────────────────────
+      - name: Upload Windows installers
+        if: runner.os == 'Windows'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $msi  = Get-ChildItem -Recurse src-tauri/target -Filter "*.msi"  | Select-Object -First 1
+          $exe  = Get-ChildItem -Recurse src-tauri/target -Filter "*-setup.exe" | Select-Object -First 1
+          if ($msi)  { gh release upload $env:GITHUB_REF_NAME "$($msi.FullName)#$($msi.Name)" --clobber }
+          if ($exe)  { gh release upload $env:GITHUB_REF_NAME "$($exe.FullName)#$($exe.Name)" --clobber }
 
-            ### Downloads
-            | Platform | File |
-            |----------|------|
-            | macOS (Apple Silicon) | `Buddy_*_aarch64.dmg` |
-            | macOS (Intel) | `Buddy_*_x64.dmg` |
-            | Windows (x64) | `Buddy_*_x64-setup.exe` or `Buddy_*_x64_en-US.msi` |
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+  # ─── After all builds succeed, publish the release ─────────────────────────
+  publish-release:
+    name: Publish Release
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Publish (remove draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit ${{ github.ref_name }} --draft=false --repo ${{ github.repository }}

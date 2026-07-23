@@ -62,6 +62,7 @@
     "autostart:allow-is-enabled",
     "process:default",
     "process:allow-exit",
-    "process:allow-restart"
+    "process:allow-restart",
+    "core:webview:default"
   ]
 }

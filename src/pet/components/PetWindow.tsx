@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../../store/petStore';
+import type { PetState } from '../../shared/types';
 import { usePetController } from '../hooks/usePetController';
 import { usePetDrag } from '../hooks/usePetDrag';
 import PetImage from './PetImage';
@@ -19,7 +20,7 @@ import { useReminderScheduler } from '../../reminders/useReminderScheduler';
  */
 const PetWindow: React.FC = () => {
   const config = usePetStore((state) => state.config);
-  const petState = usePetStore((state) => state.petState);
+  const petState = usePetStore((state) => state.petState) as PetState;
   const direction = usePetStore((state) => state.direction);
   const activeAnimationKey = usePetStore((state) => state.activeAnimationKey);
   const activeBubble = usePetStore((state) => state.activeBubble);
@@ -78,7 +79,8 @@ const PetWindow: React.FC = () => {
 
 
 
-  const hasBubble = activeBubble !== null && petState !== 'dragging';
+  const isDragging = petState === 'dragging';
+  const hasBubble = activeBubble !== null && !isDragging;
 
   // When bubble is visible, the native window is expanded.
   // The pet drag layer must only cover the pet area, not the bubble area.
@@ -93,10 +95,10 @@ const PetWindow: React.FC = () => {
         left: 0,
         width: config.width,
         height: config.height,
-        cursor: petState === 'dragging' ? 'grabbing' : 'grab',
+        cursor: isDragging ? 'grabbing' : 'grab',
       }
     : {
-        cursor: petState === 'dragging' ? 'grabbing' : 'grab',
+        cursor: isDragging ? 'grabbing' : 'grab',
       };
 
   // Stay fully transparent while loading — a dashed/emoji placeholder reads as
@@ -132,7 +134,7 @@ const PetWindow: React.FC = () => {
             width={config.width}
             height={config.height}
             alt="Your pet"
-            animationKey={petState === 'dragging'
+            animationKey={isDragging
               ? (direction === -1 ? 'running-left' : 'running-right')
               : (activeAnimationKey ?? undefined)}
           />
@@ -140,7 +142,7 @@ const PetWindow: React.FC = () => {
       </div>
 
       {/* Speech bubble — outside flip layer, positioned relative to root */}
-      {activeBubble && petState !== 'dragging' && (
+      {activeBubble && !isDragging && (
         <SpeechBubble
           key={activeBubble.instanceId ?? activeBubble.message}
           bubble={activeBubble}
