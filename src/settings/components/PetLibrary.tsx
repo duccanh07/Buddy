@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { PetProfile } from '../../shared/types';
 import { isValidImagePath } from '../../shared/validation';
@@ -14,6 +14,8 @@ const PetLibrary: React.FC = () => {
   const { draftConfig, updateDraftConfig } = useSettingsStore();
   const [pets, setPets] = useState<PetProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Blob URLs keyed by pet.id — avoids asset:// CORS issues with canvas
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
 
   const loadPets = useCallback(async () => {
     try {
@@ -29,6 +31,42 @@ const PetLibrary: React.FC = () => {
   useEffect(() => {
     loadPets();
   }, [loadPets]);
+
+  // Load blob URLs for all pet thumbnails whenever the pet list changes
+  useEffect(() => {
+    if (pets.length === 0) {
+      setThumbnailUrls({});
+      return;
+    }
+
+    const blobMap: Record<string, string> = {};
+
+    async function loadThumbnails() {
+      for (const pet of pets) {
+        if (!pet.imagePath) continue;
+        try {
+          const bytes = await readFile(pet.imagePath);
+          const ext = pet.imagePath.split('.').pop()?.toLowerCase() ?? 'png';
+          const mime =
+            ext === 'webp' ? 'image/webp'
+            : ext === 'gif'  ? 'image/gif'
+            : 'image/png';
+          const blob = new Blob([bytes], { type: mime });
+          blobMap[pet.id] = URL.createObjectURL(blob);
+        } catch (e) {
+          console.warn('[PetLibrary] Failed to load thumbnail for', pet.id, e);
+        }
+      }
+      setThumbnailUrls(blobMap);
+    }
+
+    loadThumbnails();
+
+    return () => {
+      // Revoke all blob URLs to free memory
+      Object.values(blobMap).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [pets]);
 
   const handleImportPet = async () => {
     try {
@@ -186,7 +224,9 @@ const PetLibrary: React.FC = () => {
                   style={{
                     width: thumbnailWidth,
                     height: thumbnailHeight,
-                    backgroundImage: `url("${convertFileSrc(pet.imagePath)}")`,
+                    backgroundImage: thumbnailUrls[pet.id]
+                      ? `url("${thumbnailUrls[pet.id]}")`
+                      : 'none',
                     backgroundRepeat: 'no-repeat',
                     backgroundPosition: 'left top',
                     backgroundSize: `${Math.max(1, pet.spritesheetCols)}00% ${Math.max(1, pet.spritesheetRows)}00%`,

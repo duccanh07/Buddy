@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { usePetStore } from '../../store/petStore';
 import type { AnimationManifest } from '../../shared/types';
 import {
@@ -172,28 +172,56 @@ const PetImage: React.FC<PetImageProps> = ({
       return;
     }
 
-    try {
-      const src = convertFileSrc(imagePath);
-      setImgSrc(src);
-      const image = new Image();
-      image.crossOrigin = 'anonymous';
-      image.decoding = 'async';
-      image.src = src;
-      image.onload = () => {
-        imageRef.current = image;
-        setIsImageLoaded(true);
-        onLoadRef.current?.();
-      };
-      image.onerror = () => {
+    let blobUrl: string | null = null;
+    let cancelled = false;
+
+    async function loadImage() {
+      try {
+        const bytes = await readFile(imagePath);
+        if (cancelled) return;
+
+        // Detect MIME type from extension — Blob URLs bypass asset:// CORS entirely.
+        const ext = imagePath.split('.').pop()?.toLowerCase() ?? 'png';
+        const mime =
+          ext === 'webp' ? 'image/webp'
+          : ext === 'gif'  ? 'image/gif'
+          : 'image/png';
+        const blob = new Blob([bytes], { type: mime });
+        blobUrl = URL.createObjectURL(blob);
+
+        setImgSrc(blobUrl);
+
+        const image = new Image();
+        // No crossOrigin needed — Blob URLs are same-origin, so canvas.drawImage()
+        // + getImageData() work without SecurityError.
+        image.decoding = 'async';
+        image.src = blobUrl;
+        image.onload = () => {
+          if (cancelled) return;
+          imageRef.current = image;
+          setIsImageLoaded(true);
+          onLoadRef.current?.();
+        };
+        image.onerror = () => {
+          if (cancelled) return;
+          setHasError(true);
+          setIsImageLoaded(false);
+          onErrorRef.current?.();
+        };
+      } catch (error) {
+        if (cancelled) return;
+        console.error('[PetImage] Failed to read image file:', error);
         setHasError(true);
-        setIsImageLoaded(false);
         onErrorRef.current?.();
-      };
-    } catch (error) {
-      console.error('[PetImage] Failed to convert file path:', error);
-      setHasError(true);
-      onErrorRef.current?.();
+      }
     }
+
+    loadImage();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [imagePath]);
 
   // One timeline owns all frame drawing. State changes are picked up through refs,
