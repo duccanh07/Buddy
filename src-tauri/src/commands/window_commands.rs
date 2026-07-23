@@ -13,23 +13,12 @@ static PET_POSITION_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 /// Sole authority for pet desktop placement. The native pet window is always
 /// pet-sized (`offset = 0`); speech-bubble chrome must not resize or shift it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct PetAnchor {
     x: i32,
     y: i32,
     initialized: bool,
     bubble_visible: bool,
-}
-
-impl Default for PetAnchor {
-    fn default() -> Self {
-        Self {
-            x: 0,
-            y: 0,
-            initialized: false,
-            bubble_visible: false,
-        }
-    }
 }
 
 static PET_ANCHOR: LazyLock<Mutex<PetAnchor>> = LazyLock::new(|| Mutex::new(PetAnchor::default()));

@@ -355,6 +355,7 @@ pub fn delete_pet(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn update_pet_profile(
     app: AppHandle,
     id: String,
