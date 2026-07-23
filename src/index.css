@@ -216,10 +216,96 @@ input, textarea {
   font-size: 40px;
 }
 
+
 @keyframes bounce {
   from { transform: translateY(0); }
   to { transform: translateY(-8px); }
 }
+
+/* ================================================
+   PET CONTEXT MENU
+   ================================================ */
+
+.pet-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  background: rgba(20, 20, 30, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 5px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: context-menu-appear 130ms cubic-bezier(0.2, 0, 0, 1.2) both;
+  transform-origin: top left;
+}
+
+body.theme-light .pet-context-menu {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+@keyframes context-menu-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pet-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition), color var(--transition);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pet-context-menu__item:hover {
+  background: rgba(124, 109, 250, 0.18);
+  color: var(--color-accent-hover);
+}
+
+body.theme-light .pet-context-menu__item:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.pet-context-menu__item--danger {
+  color: var(--color-danger);
+}
+
+.pet-context-menu__item--danger:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--color-danger-hover);
+}
+
+.pet-context-menu__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.theme-light .pet-context-menu__separator {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 
 /* ================================================
    SPEECH BUBBLE

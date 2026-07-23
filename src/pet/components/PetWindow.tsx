@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { usePetStore } from '../../store/petStore';
 import type { PetState } from '../../shared/types';
@@ -6,6 +6,7 @@ import { usePetController } from '../hooks/usePetController';
 import { usePetDrag } from '../hooks/usePetDrag';
 import PetImage from './PetImage';
 import SpeechBubble from './SpeechBubble';
+import PetContextMenu from './PetContextMenu';
 import { useReminderScheduler } from '../../reminders/useReminderScheduler';
 
 /**
@@ -65,6 +66,28 @@ const PetWindow: React.FC = () => {
     notifyHoverEnd();
   }, [notifyHoverEnd]);
 
+  // Context menu (right-click)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  // Double-click → open Settings window
+  const handleDoubleClick = useCallback(async () => {
+    try {
+      await invoke('show_settings_window');
+    } catch (e) {
+      console.error('[PetWindow] Failed to open settings:', e);
+    }
+  }, []);
+
   const handleCloseBubble = useCallback(() => {
     hideBubble();
     void invoke('set_pet_bubble_layout', {
@@ -123,6 +146,8 @@ const PetWindow: React.FC = () => {
         {...dragHandlers}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
+        onContextMenu={handleContextMenu}
+        onDoubleClick={handleDoubleClick}
       >
         {/* Stable render layer — never recreated when animation state changes. */}
         <div
@@ -147,6 +172,15 @@ const PetWindow: React.FC = () => {
           key={activeBubble.instanceId ?? activeBubble.message}
           bubble={activeBubble}
           onClose={handleCloseBubble}
+        />
+      )}
+
+      {/* Context menu — rendered at pointer position on right-click */}
+      {contextMenu && (
+        <PetContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={handleCloseContextMenu}
         />
       )}
     </div>
